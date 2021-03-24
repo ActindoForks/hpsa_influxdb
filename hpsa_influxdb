@@ -1,0 +1,108 @@
+#!/bin/bash
+
+# check_mk check f. HP Smart Array Controller
+#
+# 01/2011 Matthias Henze
+# Lizenz: GPL v2
+
+#
+# https://github.com/gebi/checkmk-agent-hp
+#
+
+# sample output - requires ssacli
+#
+#
+# ssacli controller all show 
+#
+#Smart Array P220i in Slot 0 (Embedded)    (sn: PCQVU0CRH4E0ZS)
+#
+#
+# ssacli controller slot=4 array all show 
+#
+#Smart Array P220i in Slot 0 (Embedded)
+#   Array A (SAS, Unused Space: 0  MB)
+#
+#
+# ssacli controller slot=0 array A physicaldrive all show
+#
+#Smart Array P220i in Slot 0 (Embedded)
+#
+#   Array A
+#
+#      physicaldrive 1I:1:1 (port 1I:box 1:bay 1, SAS HDD, 1.8 TB, OK)
+#      physicaldrive 1I:1:2 (port 1I:box 1:bay 2, SAS HDD, 1.8 TB, OK)
+#
+#
+
+function is_integer() {
+    [ "$1" -eq "$1" ] > /dev/null 2>&1
+    return $?
+}
+
+  cc=-1
+  CMD="ssacli controller all show"
+  while read -a cont; do
+    if is_integer ${cont[5]}; then
+      cc=$(($cc+1))
+      read -a cstat <<< $(ssacli controller slot=${cont[5]} show | grep "Controller Status")
+      if [ "${cstat[2]}" = "OK" ]; then
+        health_ok="1"
+      else
+        health_ok="0"
+      fi
+      echo "ssa_controller,slot=${cont[5]} health_ok=${health_ok}i,type=\"${cont[2]}\""
+      controllers[$cc]=${cont[5]}
+    fi
+  done < <( $CMD )
+
+  for c in $(seq 0 $cc)
+  do
+    ac=-1
+    CMD="ssacli controller slot=${controllers[$c]} array all show"
+    while read -a cary; do
+      if [ "X${cary[0]}X" = "XArrayX" ]; then
+        ac=$(($ac+1))
+        # collect lines
+        read -d + -a x <<< $(ssacli controller slot=${controllers[$c]} array ${cary[1]} show | sed 's/(Embedded)//')
+        # collect words
+        read -a ary <<< ${x[*]}
+        if [ "${ary[16]}" = "Used" ]; then
+          used="1"
+        else
+          used="0"
+        fi
+        echo "ssa_array,slot=${controllers[$c]},array=${cary[1]} used=${used}i,type=\"${ary[10]}\""
+        arrays[$ac]=${cary[1]}
+      fi
+    done < <( $CMD )
+  done
+
+  for c in $(seq 0 $cc)
+  do
+    for a in $(seq 0 $ac)
+    do
+      CMD="ssacli controller slot=${controllers[$c]} array ${arrays[$a]} physicaldrive all show"
+      while read -a pdrv; do
+        if [ "X${pdrv[0]}X" = "XphysicaldriveX" ]; then
+          IFS=":" read -ra pdrv_loc <<< "${pdrv[1]}"
+          if [ "x${pdrv[10]/)/}" = "xOK" ]; then
+            health_ok="1"
+          else
+            health_ok="0"
+          fi
+          case "${pdrv[9]/[),]/}" in
+            MB)
+              e="6"
+              ;;
+            GB)
+              e="9"
+              ;;
+            TB)
+              e="12"
+              ;;
+          esac
+          echo "ssa_phsicaldrive,slot=${controllers[$c]},array=${arrays[$a]},port=${pdrv_loc[0]},box=${pdrv_loc[1]},bay=${pdrv_loc[2]},drive=${pdrv[1]} health_ok=${health_ok}i,health_str=\"${pdrv[10]/)/}\",size=${pdrv[8]}E+$e,type=\"${ary[10]}\""
+        fi
+      done < <( $CMD )
+    done
+  done
