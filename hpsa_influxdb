@@ -85,7 +85,7 @@ function is_integer() {
       while read -a pdrv; do
         if [ "X${pdrv[0]}X" = "XphysicaldriveX" ]; then
           IFS=":" read -ra pdrv_loc <<< "${pdrv[1]}"
-          if [ "x${pdrv[10]/)/}" = "xOK" ]; then
+          if [ "x${pdrv[10]//[),]/}" = "xOK" ]; then
             health_ok="1"
           else
             health_ok="0"
@@ -101,7 +101,8 @@ function is_integer() {
               e="12"
               ;;
           esac
-          echo "ssa_phsicaldrive,slot=${controllers[$c]},array=${arrays[$a]},port=${pdrv_loc[0]},box=${pdrv_loc[1]},bay=${pdrv_loc[2]},drive=${pdrv[1]} health_ok=${health_ok}i,health_str=\"${pdrv[10]/)/}\",size=${pdrv[8]}E+$e,type=\"${ary[10]}\""
+          health_str="${pdrv[@]:10}"
+          echo "ssa_phsicaldrive,slot=${controllers[$c]},array=${arrays[$a]},port=${pdrv_loc[0]},box=${pdrv_loc[1]},bay=${pdrv_loc[2]},drive=${pdrv[1]} health_ok=${health_ok}i,health_str=\"${health_str/)/}\",size=${pdrv[8]}E+$e,type=\"${ary[10]}\""
         fi
       done < <( $CMD )
     done

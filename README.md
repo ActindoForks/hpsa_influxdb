@@ -10,3 +10,4 @@ ssa_phsicaldrive,slot=0,array=A,port=1I,box=1,bay=1,drive=1I:1:1 health_ok=1i,he
 ssa_phsicaldrive,slot=0,array=A,port=1I,box=1,bay=2,drive=1I:1:2 health_ok=1i,health_str="OK",size=1.8E+12,type="SAS"
 ```
 
+(based on https://github.com/gebi/checkmk-agent-hp)
